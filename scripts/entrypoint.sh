@@ -12,7 +12,7 @@ if [ -n "${DSH_TRUSTED_HOSTS:-}" ]; then
   done
 fi
 
-node /app/apps/cli/lib/bin.js "${ARGS[@]}" &
+dsh "${ARGS[@]}" &
 NODE_PID=$!
 node /proxy.mjs &
 PROXY_PID=$!
