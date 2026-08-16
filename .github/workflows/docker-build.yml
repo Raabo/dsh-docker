@@ -47,11 +47,15 @@ jobs:
           echo "sha=$(git -C dsh rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "short=$(git -C dsh rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
 
+      # 4b. Docker tag 必须小写
+      - name: Normalize owner
+        run: echo "OWNER_LC=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
       # 5. 检查该 SHA 的镜像是否已存在（上游未更新则跳过）
       - name: Check existing image
         id: check
         run: |
-          if docker manifest inspect ghcr.io/${{ github.repository_owner }}/dsh:sha-${{ steps.sha.outputs.short }} >/dev/null 2>&1; then
+          if docker manifest inspect ghcr.io/${{ env.OWNER_LC }}/dsh:sha-${{ steps.sha.outputs.short }} >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -80,8 +84,8 @@ jobs:
           file: ./dsh/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/dsh:latest
-            ghcr.io/${{ github.repository_owner }}/dsh:sha-${{ steps.sha.outputs.short }}
+            ghcr.io/${{ env.OWNER_LC }}/dsh:latest
+            ghcr.io/${{ env.OWNER_LC }}/dsh:sha-${{ steps.sha.outputs.short }}
           labels: |
             org.opencontainers.image.source=https://github.com/deepseek-ai/deepseek-harness
             org.opencontainers.image.revision=${{ steps.sha.outputs.sha }}
@@ -94,5 +98,5 @@ jobs:
         if: steps.check.outputs.exists == 'false' || inputs.force == 'true'
         run: |
           echo "✅ 已构建并推送:" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ghcr.io/${{ github.repository_owner }}/dsh:latest" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ghcr.io/${{ github.repository_owner }}/dsh:sha-${{ steps.sha.outputs.short }} (upstream ${{ steps.sha.outputs.sha }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ghcr.io/${{ env.OWNER_LC }}/dsh:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ghcr.io/${{ env.OWNER_LC }}/dsh:sha-${{ steps.sha.outputs.short }} (upstream ${{ steps.sha.outputs.sha }})" >> "$GITHUB_STEP_SUMMARY"
