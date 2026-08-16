@@ -6,8 +6,10 @@
 
 ## 镜像
 
-- `ghcr.io/raabo/dsh:latest` — 最新构建（约 **970MB**，amd64）
-- `ghcr.io/raabo/dsh:sha-<commit>` — 按上游 commit 固定的版本（可回滚）
+- `ghcr.io/raabo/dsh:latest` — 最新构建（约 **500MB**，amd64）
+- `ghcr.io/raabo/dsh:v<版本>` — 按 npm 版本固定的镜像（如 `v0.1.0-rc.6`，可回滚）
+
+基于上游官方 npm 包 `@deepseek-ai/dsh`（预构建发布）安装，非源码编译。
 
 ## 快速开始
 
@@ -85,10 +87,10 @@ docker compose down                        # 停止（数据保留在主机目�
 
 ## 构建机制
 
-- 仓库：<https://github.com/Raabo/dsh-docker>（workflow 直接检出上游 `deepseek-ai/deepseek-harness` master）
+- 仓库：<https://github.com/Raabo/dsh-docker>（workflow 用 npm 官方包 `@deepseek-ai/dsh` 构建，无需上游源码）
 - 触发：每 6 小时 schedule + push + 手动 `workflow_dispatch`（`force=true` 强制重建）
-- 跳过逻辑：镜像 tag 含上游 commit SHA，`sha-` tag 已存在则跳过（上游无更新不重建）
-- 镜像标签同时带 `org.opencontainers.image.revision`（上游 commit）便于溯源
+- 跳过逻辑：镜像 tag 含 npm 版本号，`v<版本>` tag 已存在则跳过（npm 未发新版不重建）
+- 与源码版差异：npm 包为上游预构建发布（版本滞后于 git master），**不含 codex/claude 子代理 SDK**（镜像更小的主要原因）；需要子代理功能可另行通过 `dsh plugin` 安装
 
 ## 安全说明
 
