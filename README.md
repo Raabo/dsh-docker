@@ -12,10 +12,12 @@
 ## 快速开始
 
 ```bash
+mkdir -p /path/to/dsh-data /path/to/dsh-workspace   # 换成你自己的主机目录
+
 docker run -d --name dsh \
   -p 3080:3080 \
-  -v dsh-data:/data/dsh \
-  -v dsh-workspace:/workspace \
+  -v /path/to/dsh-data:/data/dsh \
+  -v /path/to/dsh-workspace:/workspace \
   -e DSH_TRUSTED_HOSTS="192.168.1.100" \
   ghcr.io/raabo/dsh:latest
 ```
@@ -35,15 +37,18 @@ services:
     ports:
       - "3080:3080"
     volumes:
-      - dsh-data:/data/dsh
-      - dsh-workspace:/workspace
-    environment:
-      # 远程访问必填：你的 NAS IP 或域名（空格分隔多个）
-      DSH_TRUSTED_HOSTS: 192.168.1.100
+      # 绑定挂载：数据保存在主机目录（把 ./data 换成你自己的路径，如 /vol1/docker/dsh）
+      - ./data/dsh:/data/dsh        # 配置 / profile / 会话
+      - ./workspace:/workspace      # 默认工作区
 
-volumes:
-  dsh-data:
-  dsh-workspace:
+    environment:
+      # ── 按需取消注释 ──────────────────────────────
+      # 远程访问必填：浏览器地址栏的 IP 或域名（空格分隔多个）
+      # DSH_TRUSTED_HOSTS: 192.168.1.100
+      # 远程配置模型/密钥（放宽上游 loopback-only 限制，仅可信网络内使用）
+      # DSH_ALLOW_REMOTE_SETTINGS: "1"
+      # 关闭遥测（镜像默认已开启，无需设置）
+      # DSH_TELEMETRY_DISABLED: "1"
 ```
 
 启动：
@@ -57,7 +62,7 @@ docker compose up -d
 ```bash
 docker compose logs -f dsh                 # 看日志
 docker compose pull && docker compose up -d  # 拉取最新镜像并重启
-docker compose down                        # 停止（数据保留在卷里）
+docker compose down                        # 停止（数据保留在主机目录）
 ```
 
 ## 环境变量
@@ -71,8 +76,12 @@ docker compose down                        # 停止（数据保留在卷里）
 
 ## 数据卷
 
-- `/data/dsh` — dsh 配置、profile、会话（`DSH_HOME`）
-- `/workspace` — 默认工作区（headless 任务的运行目录）
+使用**绑定挂载**把数据持久化到主机目录（推荐，方便备份/迁移）：
+
+- `主机目录:/data/dsh` — dsh 配置、profile、会话（`DSH_HOME`）
+- `主机目录:/workspace` — 默认工作区（headless 任务的运行目录）
+
+> 注意：绑定挂载目录需提前创建，且宿主目录属主需为 `node`（UID 1000）或放宽权限，否则容器内无法写入。
 
 ## 构建机制
 
