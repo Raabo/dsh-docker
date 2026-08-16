@@ -24,28 +24,40 @@ docker run -d --name dsh \
 
 ## Docker Compose
 
-仓库根目录自带 [`docker-compose.yml`](docker-compose.yml)，一条命令启动：
+创建 `docker-compose.yml`：
 
-```bash
-docker compose up -d
+```yaml
+services:
+  dsh:
+    image: ghcr.io/raabo/dsh:latest
+    container_name: dsh
+    restart: unless-stopped
+    ports:
+      - "3080:3080"
+    volumes:
+      - dsh-data:/data/dsh
+      - dsh-workspace:/workspace
+    environment:
+      # 远程访问必填：你的 NAS IP 或域名（空格分隔多个）
+      DSH_TRUSTED_HOSTS: 192.168.1.100
+
+volumes:
+  dsh-data:
+  dsh-workspace:
 ```
 
-远程访问需先配置信任白名单（否则 `/api` 返回 403）。两种方式任选：
+启动：
 
 ```bash
-# 方式一：.env 文件
-echo "DSH_TRUSTED_HOSTS=192.168.1.100" > .env
 docker compose up -d
-
-# 方式二：直接改 docker-compose.yml 的 environment 段
 ```
 
 常用命令：
 
 ```bash
-docker compose logs -f dsh   # 看日志
-docker compose pull && docker compose up -d   # 拉取最新镜像并重启
-docker compose down          # 停止（数据保留在卷里）
+docker compose logs -f dsh                 # 看日志
+docker compose pull && docker compose up -d  # 拉取最新镜像并重启
+docker compose down                        # 停止（数据保留在卷里）
 ```
 
 ## 环境变量
