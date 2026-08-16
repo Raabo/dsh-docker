@@ -65,6 +65,7 @@ docker compose down                        # 停止（数据保留在卷里）
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `DSH_TRUSTED_HOSTS` | （空） | **远程访问必填**。空格分隔的主机列表（`host` 或 `host:port`，不支持通配符）。dsh 的 `/api` 有浏览器信任围栏（防 DNS rebinding / 跨站请求），从非回环地址访问时 Host 必须在此白名单内，否则 API 返回 403。例如 `-e DSH_TRUSTED_HOSTS="192.168.1.100 nas.example.com"`。无端口条目匹配该主机任意端口 |
+| `DSH_ALLOW_REMOTE_SETTINGS` | `0` | **默认关闭**。设为 `1` 且请求 Host 在白名单内时，允许远程浏览器访问 settings/credentials 域（LLM 模型配置、密钥）。上游设计为 loopback-only（仅本机可改设置），此开关显式放宽该限制——**仅应在可信网络（内网/VPN）内开启**，否则任何白名单内主机都可读改你的模型配置与密钥 |
 | `DSH_HOME` | `/data/dsh` | 配置 / profile / 会话数据目录（建议挂载卷持久化） |
 | `DSH_TELEMETRY_DISABLED` | `1` | 关闭遥测 |
 
@@ -83,5 +84,6 @@ docker compose down                        # 停止（数据保留在卷里）
 ## 安全说明
 
 - 容器以非 root（`node` 用户）运行
-- 上游刻意禁止 `--host 0.0.0.0`（防止 agent 的远程代码执行能力直接暴露到网络）；本镜像内 dsh 监听 `127.0.0.1:3081`，由 socat 转发 `0.0.0.0:3080`，对外暴露前请务必确认网络边界（防火墙 / Traefik 反向代理 + 认证）
+- 上游刻意禁止 `--host 0.0.0.0`（防止 agent 的远程代码执行能力直接暴露到网络）；本镜像内 dsh 监听 `127.0.0.1:3081`，由内置 Node 反代转发 `0.0.0.0:3080`，对外暴露前请务必确认网络边界（防火墙 / Traefik 反向代理 + 认证）
+- 设置域（模型配置、密钥）上游强制 loopback-only：远程浏览器访问时 `/api/settings.*`、`/api/credentials.*` 返回 403，属预期行为。本机访问（`localhost` / SSH 隧道）不受影响；确需远程配置时再开 `DSH_ALLOW_REMOTE_SETTINGS=1`（见环境变量表）
 - landlock 原生沙箱（`@deepseek-ai/node-addon-landlock-run`）未内置；如需要可在容器内通过 `dsh plugin` 安装并特权运行
