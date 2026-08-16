@@ -36,9 +36,12 @@ jobs:
           ref: master
           path: dsh
 
-      # 3. 把 Dockerfile 放入上游源码目录
+      # 3. 把 Dockerfile / entrypoint 放入上游源码目录
       - name: Stage Dockerfile
-        run: cp Dockerfile .dockerignore dsh/
+        run: |
+          cp Dockerfile .dockerignore dsh/
+          mkdir -p dsh/scripts
+          cp scripts/entrypoint.sh dsh/scripts/
 
       # 4. 取上游 HEAD SHA
       - name: Resolve upstream SHA
