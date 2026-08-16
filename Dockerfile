@@ -14,11 +14,13 @@ FROM node:24-slim AS runtime
 ENV NODE_ENV=production \
     DSH_TELEMETRY_DISABLED=1 \
     DSH_HOME=/data/dsh \
-    DSH_TRUSTED_HOSTS=""
-RUN apt-get update && apt-get install -y --no-install-recommends socat bash \
+    DSH_TRUSTED_HOSTS="" \
+    DSH_ALLOW_REMOTE_SETTINGS=0
+RUN apt-get update && apt-get install -y --no-install-recommends bash \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app /app
 COPY scripts/entrypoint.sh /entrypoint.sh
+COPY proxy.mjs /proxy.mjs
 RUN chmod +x /entrypoint.sh \
     && mkdir -p /data/dsh /workspace && chown -R node:node /data/dsh /workspace
 USER node
