@@ -6,7 +6,7 @@
 
 ## 镜像
 
-- `ghcr.io/raabo/dsh:latest` — 最新构建
+- `ghcr.io/raabo/dsh:latest` — 最新构建（约 **970MB**，amd64）
 - `ghcr.io/raabo/dsh:sha-<commit>` — 按上游 commit 固定的版本（可回滚）
 
 ## 快速开始
