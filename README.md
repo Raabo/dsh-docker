@@ -22,6 +22,32 @@ docker run -d --name dsh \
 
 然后浏览器打开 `http://<主机IP>:3080`。
 
+## Docker Compose
+
+仓库根目录自带 [`docker-compose.yml`](docker-compose.yml)，一条命令启动：
+
+```bash
+docker compose up -d
+```
+
+远程访问需先配置信任白名单（否则 `/api` 返回 403）。两种方式任选：
+
+```bash
+# 方式一：.env 文件
+echo "DSH_TRUSTED_HOSTS=192.168.1.100" > .env
+docker compose up -d
+
+# 方式二：直接改 docker-compose.yml 的 environment 段
+```
+
+常用命令：
+
+```bash
+docker compose logs -f dsh   # 看日志
+docker compose pull && docker compose up -d   # 拉取最新镜像并重启
+docker compose down          # 停止（数据保留在卷里）
+```
+
 ## 环境变量
 
 | 变量 | 默认 | 说明 |
