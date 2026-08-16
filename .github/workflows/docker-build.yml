@@ -1,0 +1,98 @@
+name: Build dsh image
+
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '0 */6 * * *'        # 每 6 小时检查上游更新
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '强制重建（忽略镜像已存在检查）'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: dsh-image-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      # 1. 检出本仓库（含 Dockerfile / .dockerignore）
+      - uses: actions/checkout@v6
+
+      # 2. 检出上游 master（永远最新，无需 fork 同步）
+      - uses: actions/checkout@v6
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: master
+          path: dsh
+
+      # 3. 把 Dockerfile 放入上游源码目录
+      - name: Stage Dockerfile
+        run: cp Dockerfile .dockerignore dsh/
+
+      # 4. 取上游 HEAD SHA
+      - name: Resolve upstream SHA
+        id: sha
+        run: |
+          echo "sha=$(git -C dsh rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git -C dsh rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      # 5. 检查该 SHA 的镜像是否已存在（上游未更新则跳过）
+      - name: Check existing image
+        id: check
+        run: |
+          if docker manifest inspect ghcr.io/${{ github.repository_owner }}/dsh:sha-${{ steps.sha.outputs.short }} >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip notice
+        if: steps.check.outputs.exists == 'true' && inputs.force != 'true'
+        run: echo "上游无更新（sha-${{ steps.sha.outputs.short }} 已构建），跳过。" >> "$GITHUB_STEP_SUMMARY"
+
+      # 6. Buildx + 登录 ghcr.io（GITHUB_TOKEN 内置，零额外凭据）
+      - uses: docker/setup-buildx-action@v3
+        if: steps.check.outputs.exists == 'false' || inputs.force == 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.check.outputs.exists == 'false' || inputs.force == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 7. 构建 + 推送
+      - uses: docker/build-push-action@v6
+        if: steps.check.outputs.exists == 'false' || inputs.force == 'true'
+        with:
+          context: ./dsh
+          file: ./dsh/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/dsh:latest
+            ghcr.io/${{ github.repository_owner }}/dsh:sha-${{ steps.sha.outputs.short }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/deepseek-ai/deepseek-harness
+            org.opencontainers.image.revision=${{ steps.sha.outputs.sha }}
+            org.opencontainers.image.title=DeepSeek Harness (dsh)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 8. 构建摘要
+      - name: Summary
+        if: steps.check.outputs.exists == 'false' || inputs.force == 'true'
+        run: |
+          echo "✅ 已构建并推送:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ghcr.io/${{ github.repository_owner }}/dsh:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ghcr.io/${{ github.repository_owner }}/dsh:sha-${{ steps.sha.outputs.short }} (upstream ${{ steps.sha.outputs.sha }})" >> "$GITHUB_STEP_SUMMARY"
