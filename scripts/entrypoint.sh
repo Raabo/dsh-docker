@@ -7,6 +7,8 @@ set -e
 
 # bind mount 权限自修复（幂等；失败不阻塞启动）
 chown -R node:node /data/dsh /workspace 2>/dev/null || true
+# 密钥文件必须 owner-only（dsh 安全检查，权限过宽会拒绝启动）
+chmod 600 /data/dsh/.credentials.yaml 2>/dev/null || true
 
 ARGS=(web --host 127.0.0.1 --port 3081)
 if [ -n "${DSH_TRUSTED_HOSTS:-}" ]; then
