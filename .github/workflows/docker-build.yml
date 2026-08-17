@@ -37,15 +37,20 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "tag=v$V" >> "$GITHUB_OUTPUT"
 
+      # 2a. 本仓库 SHA（Dockerfile/entrypoint 变化也要触发重建）
+      - name: Resolve own SHA
+        id: own
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
       # 3. Docker tag 必须小写
       - name: Normalize owner
         run: echo "OWNER_LC=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
-      # 4. 检查该版本的镜像是否已存在（npm 未发新版则跳过）
+      # 4. 检查组合 tag（npm 版本 + 本仓库 SHA）是否已存在（两者都没变则跳过）
       - name: Check existing image
         id: check
         run: |
-          if docker manifest inspect ghcr.io/${{ env.OWNER_LC }}/dsh:${{ steps.ver.outputs.tag }} >/dev/null 2>&1; then
+          if docker manifest inspect ghcr.io/${{ env.OWNER_LC }}/dsh:${{ steps.ver.outputs.tag }}-r${{ steps.own.outputs.short }} >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -76,6 +81,7 @@ jobs:
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/dsh:latest
             ghcr.io/${{ env.OWNER_LC }}/dsh:${{ steps.ver.outputs.tag }}
+            ghcr.io/${{ env.OWNER_LC }}/dsh:${{ steps.ver.outputs.tag }}-r${{ steps.own.outputs.short }}
           labels: |
             org.opencontainers.image.source=https://github.com/deepseek-ai/deepseek-harness
             org.opencontainers.image.version=${{ steps.ver.outputs.version }}
