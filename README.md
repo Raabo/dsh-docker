@@ -2,14 +2,13 @@
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）的自动构建 Docker 镜像。
 
-上游仓库每次更新（每 6 小时检查一次），GitHub Actions 会自动从源码构建并发布新镜像。
+基于上游官方 npm 包 `@deepseek-ai/dsh`（预构建发布）构建，非源码编译。每 6 小时检查 npm 新版本，有更新自动构建发布。
 
 ## 镜像
 
-- `ghcr.io/raabo/dsh:latest` — 最新构建（约 **500MB**，amd64）
-- `ghcr.io/raabo/dsh:v<版本>` — 按 npm 版本固定的镜像（如 `v0.1.0-rc.6`，可回滚）
-
-基于上游官方 npm 包 `@deepseek-ai/dsh`（预构建发布）安装，非源码编译。
+- `ghcr.io/raabo/dsh:latest` — 最新构建（约 **487MB**，amd64）
+- `ghcr.io/raabo/dsh:v<版本>` — 按 npm 版本固定（如 `v0.1.0-rc.6`，可回滚）
+- `ghcr.io/raabo/dsh:v<版本>-r<commit>` — 版本 + 构建仓库 commit 组合 tag（精确追溯本次构建的 Dockerfile/entrypoint 状态）
 
 ## 快速开始
 
@@ -49,7 +48,7 @@ services:
       # DSH_TRUSTED_HOSTS: 192.168.1.100
       # 远程配置模型/密钥（放宽上游 loopback-only 限制，仅可信网络内使用）
       # DSH_ALLOW_REMOTE_SETTINGS: "1"
-      # 关闭遥测（镜像默认已开启，无需设置）
+      # 关闭遥测（镜像默认已启用，无需设置）
       # DSH_TELEMETRY_DISABLED: "1"
 ```
 
@@ -83,18 +82,19 @@ docker compose down                        # 停止（数据保留在主机目�
 - `主机目录:/data/dsh` — dsh 配置、profile、会话（`DSH_HOME`）
 - `主机目录:/workspace` — 默认工作区（headless 任务的运行目录）
 
-> 注意：绑定挂载目录需提前创建，且宿主目录属主需为 `node`（UID 1000）或放宽权限，否则容器内无法写入。
+> 目录需提前创建，但**无需手动设置属主**：镜像 entrypoint 以 root 启动，会自动 `chown` 数据目录为容器内 `node` 用户（UID 1000）并 `chmod 600` 密钥文件，随后降权运行 dsh。绑定挂载权限问题由容器自愈。
 
 ## 构建机制
 
 - 仓库：<https://github.com/Raabo/dsh-docker>（workflow 用 npm 官方包 `@deepseek-ai/dsh` 构建，无需上游源码）
 - 触发：每 6 小时 schedule + push + 手动 `workflow_dispatch`（`force=true` 强制重建）
-- 跳过逻辑：镜像 tag 含 npm 版本号，`v<版本>` tag 已存在则跳过（npm 未发新版不重建）
+- 跳过逻辑：检测**组合 tag** `v<npm版本>-r<本仓库commit>` 是否已存在——npm 发新版或本仓库 Dockerfile/entrypoint 有改动都会重建，两者都没变才跳过
 - 与源码版差异：npm 包为上游预构建发布（版本滞后于 git master），**不含 codex/claude 子代理 SDK**（镜像更小的主要原因）；需要子代理功能可另行通过 `dsh plugin` 安装
 
 ## 安全说明
 
-- 容器以非 root（`node` 用户）运行
+- entrypoint 以 root 启动（仅用于修复挂载目录权限），随后**降权为 `node` 用户运行 dsh 与反代**
 - 上游刻意禁止 `--host 0.0.0.0`（防止 agent 的远程代码执行能力直接暴露到网络）；本镜像内 dsh 监听 `127.0.0.1:3081`，由内置 Node 反代转发 `0.0.0.0:3080`，对外暴露前请务必确认网络边界（防火墙 / Traefik 反向代理 + 认证）
 - 设置域（模型配置、密钥）上游强制 loopback-only：远程浏览器访问时 `/api/settings.*`、`/api/credentials.*` 返回 403，属预期行为。本机访问（`localhost` / SSH 隧道）不受影响；确需远程配置时再开 `DSH_ALLOW_REMOTE_SETTINGS=1`（见环境变量表）
+- 密钥文件 `.credentials.yaml` 强制 owner-only（600），权限过宽时 dsh 会拒绝启动（防泄露设计）；镜像 entrypoint 会自动修复
 - landlock 原生沙箱（`@deepseek-ai/node-addon-landlock-run`）未内置；如需要可在容器内通过 `dsh plugin` 安装并特权运行
