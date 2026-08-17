@@ -18,7 +18,8 @@ RUN ln -sf /usr/local/lib/node_modules/@deepseek-ai/dsh/lib/bin.js /usr/local/bi
 COPY scripts/entrypoint.sh /entrypoint.sh
 COPY proxy.mjs /proxy.mjs
 RUN chmod +x /entrypoint.sh
-USER node
+# 以 root 启动（entrypoint 内修复 bind mount 属主后降权为 node 运行）
+# USER node
 WORKDIR /workspace
 EXPOSE 3080
 VOLUME ["/data/dsh", "/workspace"]
