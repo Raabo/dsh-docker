@@ -4,7 +4,7 @@ on:
   push:
     branches: [master]
   schedule:
-    - cron: '0 */6 * * *'        # 每 6 小时检查 npm 新版本
+    - cron: '0 */6 * * *'        # 每 6 小时检查上游更新
   workflow_dispatch:
     inputs:
       force:
@@ -24,33 +24,47 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       # 1. 检出本仓库（含 Dockerfile / proxy.mjs / entrypoint）
       - uses: actions/checkout@v6
 
-      # 2. 取 npm 最新发布版本
-      - name: Resolve npm version
-        id: ver
-        run: |
-          V=$(npm view @deepseek-ai/dsh version)
-          echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+      # 2. 检出上游 master（永远最新，无需 fork 同步）
+      - uses: actions/checkout@v6
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: master
+          path: dsh
 
-      # 2a. 本仓库 SHA（Dockerfile/entrypoint 变化也要触发重建）
+      # 3. 把 Dockerfile / entrypoint / proxy 放入上游源码目录
+      - name: Stage Dockerfile
+        run: |
+          cp Dockerfile .dockerignore dsh/
+          cp proxy.mjs dsh/
+          mkdir -p dsh/scripts
+          cp scripts/entrypoint.sh dsh/scripts/
+
+      # 4. 取上游 HEAD SHA
+      - name: Resolve upstream SHA
+        id: sha
+        run: |
+          echo "sha=$(git -C dsh rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "short=$(git -C dsh rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+
+      # 4a. 本仓库 SHA（Dockerfile/entrypoint 变化也要触发重建）
       - name: Resolve own SHA
         id: own
         run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
-      # 3. Docker tag 必须小写
+      # 4b. Docker tag 必须小写
       - name: Normalize owner
         run: echo "OWNER_LC=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
 
-      # 4. 检查组合 tag（npm 版本 + 本仓库 SHA）是否已存在（两者都没变则跳过）
+      # 5. 检查组合 tag（上游 SHA + 本仓库 SHA）是否已存在（无变化则跳过）
       - name: Check existing image
         id: check
         run: |
-          if docker manifest inspect ghcr.io/${{ env.OWNER_LC }}/dsh:${{ steps.ver.outputs.tag }}-r${{ steps.own.outputs.short }} >/dev/null 2>&1; then
+          if docker manifest inspect ghcr.io/${{ env.OWNER_LC }}/dsh:sha-${{ steps.sha.outputs.short }}-r${{ steps.own.outputs.short }} >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -58,9 +72,9 @@ jobs:
 
       - name: Skip notice
         if: steps.check.outputs.exists == 'true' && inputs.force != 'true'
-        run: echo "npm 无新版本（${{ steps.ver.outputs.version }} 已构建），跳过。" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "上游无更新（sha-${{ steps.sha.outputs.short }} 已构建），跳过。" >> "$GITHUB_STEP_SUMMARY"
 
-      # 5. Buildx + 登录 ghcr.io（GITHUB_TOKEN 内置）
+      # 6. Buildx + 登录 ghcr.io（GITHUB_TOKEN 内置，零额外凭据）
       - uses: docker/setup-buildx-action@v3
         if: steps.check.outputs.exists == 'false' || inputs.force == 'true'
 
@@ -71,28 +85,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 6. 构建 + 推送（npm 包模式：无上游源码，context 为本仓库）
+      # 7. 构建 + 推送（源码模式：context 为上游源码目录；.git 被 .dockerignore 排除，
+      #    上游 commit 通过 build arg 注入，供构建产物记录）
       - uses: docker/build-push-action@v6
         if: steps.check.outputs.exists == 'false' || inputs.force == 'true'
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./dsh
+          file: ./dsh/Dockerfile
           push: true
+          build-args: |
+            DSH_CLIENT_COMMIT_HASH=${{ steps.sha.outputs.sha }}
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/dsh:latest
-            ghcr.io/${{ env.OWNER_LC }}/dsh:${{ steps.ver.outputs.tag }}
-            ghcr.io/${{ env.OWNER_LC }}/dsh:${{ steps.ver.outputs.tag }}-r${{ steps.own.outputs.short }}
+            ghcr.io/${{ env.OWNER_LC }}/dsh:sha-${{ steps.sha.outputs.short }}
+            ghcr.io/${{ env.OWNER_LC }}/dsh:sha-${{ steps.sha.outputs.short }}-r${{ steps.own.outputs.short }}
           labels: |
             org.opencontainers.image.source=https://github.com/deepseek-ai/deepseek-harness
-            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
-            org.opencontainers.image.title=DeepSeek Harness (dsh, npm build)
+            org.opencontainers.image.revision=${{ steps.sha.outputs.sha }}
+            org.opencontainers.image.title=DeepSeek Harness (dsh, source build)
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 7. 构建摘要
+      # 8. 构建摘要
       - name: Summary
         if: steps.check.outputs.exists == 'false' || inputs.force == 'true'
         run: |
           echo "✅ 已构建并推送:" >> "$GITHUB_STEP_SUMMARY"
           echo "- ghcr.io/${{ env.OWNER_LC }}/dsh:latest" >> "$GITHUB_STEP_SUMMARY"
-          echo "- ghcr.io/${{ env.OWNER_LC }}/dsh:${{ steps.ver.outputs.tag }} (@deepseek-ai/dsh ${{ steps.ver.outputs.version }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ghcr.io/${{ env.OWNER_LC }}/dsh:sha-${{ steps.sha.outputs.short }} (upstream ${{ steps.sha.outputs.sha }})" >> "$GITHUB_STEP_SUMMARY"

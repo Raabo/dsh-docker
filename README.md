@@ -2,13 +2,13 @@
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh`）的自动构建 Docker 镜像。
 
-基于上游官方 npm 包 `@deepseek-ai/dsh`（预构建发布）构建，非源码编译。每 6 小时检查 npm 新版本，有更新自动构建发布。
+上游仓库每次更新（每 6 小时检查一次），GitHub Actions 会自动从源码构建并发布新镜像。
 
 ## 镜像
 
-- `ghcr.io/raabo/dsh:latest` — 最新构建（约 **487MB**，amd64）
-- `ghcr.io/raabo/dsh:v<版本>` — 按 npm 版本固定（如 `v0.1.0-rc.6`，可回滚）
-- `ghcr.io/raabo/dsh:v<版本>-r<commit>` — 版本 + 构建仓库 commit 组合 tag（精确追溯本次构建的 Dockerfile/entrypoint 状态）
+- `ghcr.io/raabo/dsh:latest` — 最新构建（约 **970MB**，amd64）
+- `ghcr.io/raabo/dsh:sha-<commit>` — 按上游 commit 固定（可回滚）
+- `ghcr.io/raabo/dsh:sha-<commit>-r<commit>` — 上游 commit + 本仓库 commit 组合 tag（精确追溯本次构建的 Dockerfile/entrypoint 状态）
 
 ## 快速开始
 
@@ -86,10 +86,11 @@ docker compose down                        # 停止（数据保留在主机目�
 
 ## 构建机制
 
-- 仓库：<https://github.com/Raabo/dsh-docker>（workflow 用 npm 官方包 `@deepseek-ai/dsh` 构建，无需上游源码）
+- 仓库：<https://github.com/Raabo/dsh-docker>（workflow 直接检出上游 `deepseek-ai/deepseek-harness` master 源码构建）
 - 触发：每 6 小时 schedule + push + 手动 `workflow_dispatch`（`force=true` 强制重建）
-- 跳过逻辑：检测**组合 tag** `v<npm版本>-r<本仓库commit>` 是否已存在——npm 发新版或本仓库 Dockerfile/entrypoint 有改动都会重建，两者都没变才跳过
-- 与源码版差异：npm 包为上游预构建发布（版本滞后于 git master），**不含 codex/claude 子代理 SDK**（镜像更小的主要原因）；需要子代理功能可另行通过 `dsh plugin` 安装
+- 跳过逻辑：检测**组合 tag** `sha-<上游commit>-r<本仓库commit>` 是否已存在——上游源码更新或本仓库 Dockerfile/entrypoint 有改动都会重建，两者都没变才跳过
+- 镜像标签同时带 `org.opencontainers.image.revision`（上游 commit）便于溯源
+- 与 npm 预构建包差异：源码构建包含完整依赖（含 codex / claude 子代理 SDK，npm 预构建发布缺失），镜像更大；npm 版缺失的功能也可另行通过 `dsh plugin` 安装
 
 ## 安全说明
 
