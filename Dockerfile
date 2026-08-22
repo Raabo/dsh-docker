@@ -35,6 +35,9 @@ ENV NODE_ENV=production \
     DSH_ALLOW_REMOTE_SETTINGS=0
 RUN apt-get update && apt-get install -y --no-install-recommends bash \
     && rm -rf /var/lib/apt/lists/*
+# dsh plugin 是 pnpm 转发器（在 $DSH_HOME/profiles/<name> 里跑 pnpm 装插件包），
+# runtime 必须带 pnpm；与 builder 锁定同版本（上游 packageManager 11.7.0）
+RUN npm install -g pnpm@11.7.0 --no-audit --no-fund && rm -rf /root/.npm
 COPY --from=builder /app /app
 # dsh CLI 入口（源码构建产物 apps/cli/lib/bin.js，tsc 输出默认 644，需补可执行位）
 RUN ln -sf /app/apps/cli/lib/bin.js /usr/local/bin/dsh && chmod +x /app/apps/cli/lib/bin.js
