@@ -11,7 +11,7 @@ COPY . .
 # 该值会写进前端构建产物便于溯源，缺省时 build.ts 会报错拒绝构建）
 ARG DSH_CLIENT_COMMIT_HASH
 ENV DSH_CLIENT_COMMIT_HASH=$DSH_CLIENT_COMMIT_HASH
-RUN pnpm install --frozen-lockfile --no-audit --no-fund
+RUN pnpm install --frozen-lockfile
 RUN pnpm run build
 # 运行时只需要生产依赖（devDeps 约 700MB 不进镜像）：
 # 1. 干净重装 prod（rm 后 install --prod 的 workspace 链接正常；在已有 node_modules 上
@@ -20,7 +20,7 @@ RUN pnpm run build
 #    用全局 node-gyp 补编译（node-gyp 是 devDep，prod 模式不存在）
 # 3. subprocess-local 恢复 spawn-helper 可执行位
 # 4. .pnpm-store（pnpm 包缓存 ~690MB）在 COPY 前删除，不进镜像
-RUN rm -rf node_modules && pnpm install --frozen-lockfile --prod --ignore-scripts --no-audit --no-fund \
+RUN rm -rf node_modules && pnpm install --frozen-lockfile --prod --ignore-scripts \
     && npm install -g node-gyp >/dev/null 2>&1 \
     && cd /app/node_modules/.pnpm/node-pty@*/node_modules/node-pty && node-gyp rebuild >/dev/null \
     && cd /app/packages/subprocess/subprocess-local && node scripts/ensure-spawn-helper.mjs \
